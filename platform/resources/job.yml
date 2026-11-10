@@ -1,0 +1,43 @@
+resources:
+  jobs:
+    deep_search_memory_refresh:
+      name: deep-search-memory-refresh-${bundle.target}
+      max_concurrent_runs: 1
+      queue:
+        enabled: true
+      # Backstop schedule. The app also triggers runs after each finished session (debounced in the app).
+      schedule:
+        quartz_cron_expression: "0 */30 * * * ?"
+        timezone_id: UTC
+        pause_status: PAUSED
+      environments:
+        - environment_key: default
+          spec:
+            client: "1"
+      tasks:
+        - task_key: ingest
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.deep_search_memory_ingest.id}
+            full_refresh: false
+        - task_key: build_index_sources
+          depends_on:
+            - task_key: ingest
+          environment_key: default
+          spark_python_task:
+            python_file: ../src/jobs/build_index_sources.py
+            parameters:
+              - --catalog
+              - ${var.catalog}
+        - task_key: sync_indexes
+          depends_on:
+            - task_key: build_index_sources
+          environment_key: default
+          spark_python_task:
+            python_file: ../src/jobs/sync_indexes.py
+            parameters:
+              - --index
+              - ${var.facts_index}
+              - --index
+              - ${var.responses_index}
+              - --index
+              - ${var.activity_index}

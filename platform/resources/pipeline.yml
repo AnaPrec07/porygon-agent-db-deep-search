@@ -1,0 +1,14 @@
+resources:
+  pipelines:
+    deep_search_memory_ingest:
+      name: deep-search-memory-ingest-${bundle.target}
+      catalog: ${var.catalog}
+      serverless: true
+      continuous: false
+      configuration:
+        records_volume: ${var.records_volume}
+      libraries:
+        - file:
+            path: ../src/pipeline/bronze.sql
+        - file:
+            path: ../src/pipeline/silver.sql
