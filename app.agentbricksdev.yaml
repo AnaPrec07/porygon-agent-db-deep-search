@@ -1,0 +1,11 @@
+command:
+- uv
+- run
+- start-server
+env:
+- name: MLFLOW_TRACKING_URI
+  value: http://127.0.0.1:51099
+- name: MLFLOW_EXPERIMENT_NAME
+  value: agent-langgraph
+- name: DATABRICKS_AGENTBRICKS_RUNTIME_STORE_LOCAL
+  value: 'true'
