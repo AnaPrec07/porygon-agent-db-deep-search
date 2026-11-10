@@ -26,6 +26,8 @@ class ObjectStore(Protocol):
 
     def list_files(self, prefix: str) -> list[str]: ...
 
+    def delete(self, path: str) -> None: ...
+
 
 class LocalObjectStore:
     def __init__(self, root: str | Path) -> None:
@@ -43,6 +45,9 @@ class LocalObjectStore:
 
     def read(self, path: str) -> bytes:
         return (self._root / path).read_bytes()
+
+    def delete(self, path: str) -> None:
+        (self._root / path).unlink(missing_ok=True)
 
     def list_files(self, prefix: str) -> list[str]:
         base = self._root / prefix
@@ -71,6 +76,9 @@ class UCVolumeObjectStore:
 
     def read(self, path: str) -> bytes:
         return self._w.files.download(self._full(path)).contents.read()
+
+    def delete(self, path: str) -> None:
+        self._w.files.delete(self._full(path))
 
     def list_files(self, prefix: str) -> list[str]:
         found: list[str] = []
