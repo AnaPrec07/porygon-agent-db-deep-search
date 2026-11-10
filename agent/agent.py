@@ -1,27 +1,22 @@
 import os
 from collections.abc import AsyncGenerator, Callable
+from dataclasses import replace
 from functools import lru_cache
 from typing import Any
 
 from databricks.sdk import WorkspaceClient
 from databricks_langchain import ChatDatabricks
-from langchain.agents import create_agent
-from langchain.agents.middleware import HumanInTheLoopMiddleware
 from langchain.agents.middleware.human_in_the_loop import HITLResponse
 from langgraph.types import Command
 from pydantic import TypeAdapter, ValidationError
 
-from agent.mcps import build_mcp_servers
-
-# Importing the tools package auto-registers every tool module.
-from agent.tools import all_tools
+from agent.deep_search.config import DeepSearchConfig
+from agent.deep_search.deps import Deps
+from agent.deep_search.graph import build_graph
 from databricks_agentkit import workspace_client, workspace_headers
 from databricks_agentkit.langgraph import (
     checkpointer,
     configure_tracing,
-    genie_tools,
-    mcp_tools,
-    memory_tools,
     start_trace,
     thread_config,
 )
@@ -32,14 +27,10 @@ from databricks_agentkit.langgraph.session_store import (
 from databricks_agentkit.runtime.auth import AuthError
 from databricks_agentkit.runtime.tool_manifest import resolve_model_service
 
-# A Unity Catalog AI Gateway model service, served from the `system.ai` schema and queried through
-# the gateway (see `use_ai_gateway=True` below). Swap for any `system.ai.*` model service your
-# workspace exposes — the demo chat app's picker lists what's available.
-# `agentbricks experimental models bind` swaps this for a model service you own (wired in by `agentbricks deploy`
-# as AGENT_MODEL_SERVICE_AGENT), so `agentbricks experimental models upgrade` can change the model without a code
-# change.
-MODEL = resolve_model_service() or "system.ai.meta-llama-3-1-8b-instruct"
+MODEL = resolve_model_service() or "system.ai.meta-llama-3-1-8b-instruct"  # consumed by PR-4 LLM nodes
 
+# Template approval gate for the sample tools in agent/tools. The deep-search graph does not use these tools
+# (removed in PR-11); the constant stays so the template's tool tests keep their contract.
 # Tools that require human approval before they run. Map a tool name to True to allow every decision
 # (approve / edit / reject / respond), or to a config dict to restrict them (see HumanInTheLoopMiddleware).
 # When a listed tool is about to run, the agent pauses and emits an `interrupt` event; the client
@@ -104,38 +95,18 @@ async def create_agent_graph(
     *,
     workspace_client_for: Callable[[str], WorkspaceClient] | None = None,
 ):
-    """Build the LangGraph agent: local tools + long-term-memory tools + any MCP tools.
+    """Build the deep-search graph, compiled with the managed checkpointer.
 
-    ``actor`` is the identity whose long-term memory the agent reads/writes; it's captured in the
-    memory tools' closures (never exposed to the model).
-
-    ``model`` selects the gateway model for this run; the chat UI passes the picker's choice and
-    everything else falls back to ``MODEL``. The agent is rebuilt per turn, so the model can vary
-    request to request.
+    PR-3 skeleton: nodes are deterministic stubs and no model or search call is made, so ``actor``,
+    ``workspace_client_for`` and the model override are accepted but not yet used. PR-4 wires the LLM
+    nodes (``model`` overrides the worker model), PR-5 adds search, and PR-8 adds memory retrieval for
+    ``actor``.
     """
-    mcp = await mcp_tools(build_mcp_servers(), workspace_client_for=workspace_client_for)
-    tools = [
-        *all_tools(),
-        *memory_tools(actor),
-        *genie_tools(workspace_client_for=workspace_client_for),
-        *mcp,
-    ]
-    middleware = (
-        [HumanInTheLoopMiddleware(interrupt_on=REQUIRE_APPROVAL)] if REQUIRE_APPROVAL else []
-    )
-    endpoint = model or MODEL
-    SYSTEM_PROMPT="""Your name is Diagrammer. You are an C4 diagrams expert. Your job is to transform any architectural description into a C4 diagram."""
-    return create_agent(
-        # use_ai_gateway routes to the Unity Catalog AI Gateway (`<host>/ai-gateway/mlflow/v1`), so
-        # `endpoint` is a `system.ai.*` model name rather than a serving-endpoint name.
-        model=_RoutedChatDatabricks(
-            endpoint=endpoint, workspace_client=_app_workspace_client(), use_ai_gateway=True
-        ),
-        tools=tools,
-        system_prompt=SYSTEM_PROMPT,
-        middleware=middleware,
-        checkpointer=checkpointer(),
-    )
+    del actor, workspace_client_for
+    config = DeepSearchConfig.from_env()
+    if model:
+        config = replace(config, worker_model=model)
+    return build_graph(Deps.stub(config)).compile(checkpointer=checkpointer())
 
 
 async def recovery_input(
