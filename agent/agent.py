@@ -1,3 +1,4 @@
+import logging
 import os
 from collections.abc import AsyncGenerator, Callable
 from dataclasses import replace
@@ -26,6 +27,8 @@ from databricks_agentkit.langgraph.session_store import (
 )
 from databricks_agentkit.runtime.auth import AuthError
 from databricks_agentkit.runtime.tool_manifest import resolve_model_service
+
+logger = logging.getLogger(__name__)
 
 MODEL = resolve_model_service() or "system.ai.meta-llama-3-1-8b-instruct"  # consumed by PR-4 LLM nodes
 
@@ -97,16 +100,33 @@ async def create_agent_graph(
 ):
     """Build the deep-search graph, compiled with the managed checkpointer.
 
-    PR-3 skeleton: nodes are deterministic stubs and no model or search call is made, so ``actor``,
-    ``workspace_client_for`` and the model override are accepted but not yet used. PR-4 wires the LLM
-    nodes (``model`` overrides the worker model), PR-5 adds search, and PR-8 adds memory retrieval for
-    ``actor``.
+    With a worker model configured (``DEEP_SEARCH_WORKER_MODEL`` or the UI model override), planning,
+    outline, evaluation and composition call the model through the AI Gateway. Without one, the graph
+    runs with stub nodes and logs a warning, so a stub run cannot pass as a real one.
+
+    ``actor`` and ``workspace_client_for`` are accepted but not used until PR-8 (memory) and PR-5 (search)
+    need them. The UI model override changes the worker model; the critic model keeps its setting.
     """
     del actor, workspace_client_for
     config = DeepSearchConfig.from_env()
     if model:
         config = replace(config, worker_model=model)
-    return build_graph(Deps.stub(config)).compile(checkpointer=checkpointer())
+    if config.worker_model:
+        workspace = _app_workspace_client()
+        worker = _RoutedChatDatabricks(
+            endpoint=config.worker_model, workspace_client=workspace, use_ai_gateway=True
+        )
+        if config.critic_model and config.critic_model != config.worker_model:
+            critic = _RoutedChatDatabricks(
+                endpoint=config.critic_model, workspace_client=workspace, use_ai_gateway=True
+            )
+        else:
+            critic = worker
+        deps = Deps.from_models(config, worker=worker, critic=critic)
+    else:
+        logger.warning("DEEP_SEARCH_WORKER_MODEL is not set; the deep-search graph is running with stub nodes")
+        deps = Deps.stub(config)
+    return build_graph(deps).compile(checkpointer=checkpointer())
 
 
 async def recovery_input(

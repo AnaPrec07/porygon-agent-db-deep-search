@@ -1,16 +1,17 @@
 """Injectable dependencies for graph nodes.
 
-PR-3 provides deterministic stubs so the graph can run and be tested without a model or a search provider.
-PR-4 replaces the planning, outline, research, evaluation, refinement and composition callables with LLM calls.
+PR-3 provides deterministic stubs. PR-4 replaces planning, outline, evaluation and composition with LLM calls
+(``Deps.from_models``). Research and refinement stay stubs until PR-5 adds search.
 Every callable receives a snapshot of graph state (a plain dict) and returns plain values.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
+from agent.deep_search import llm_nodes
 from agent.deep_search.config import DeepSearchConfig
 
 StateView = dict[str, Any]
@@ -68,6 +69,17 @@ class Deps:
     evaluate: Callable[[StateView], dict[str, Any]]
     refine: Callable[[StateView], str]
     compose: Callable[[StateView], str]
+
+    @classmethod
+    def from_models(cls, config: DeepSearchConfig, *, worker: Any, critic: Any) -> Deps:
+        """Use LLM-backed plan, outline, evaluation and composition; research and refinement stay stubs (PR-5)."""
+        return replace(
+            cls.stub(config),
+            plan=lambda state: llm_nodes.plan_with_llm(worker, state),
+            outline=lambda state: llm_nodes.outline_with_llm(worker, state),
+            evaluate=lambda state: llm_nodes.evaluate_with_llm(critic, state),
+            compose=lambda state: llm_nodes.compose_with_llm(critic, state),
+        )
 
     @classmethod
     def stub(cls, config: DeepSearchConfig | None = None) -> Deps:
