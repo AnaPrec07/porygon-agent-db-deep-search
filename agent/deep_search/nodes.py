@@ -46,6 +46,9 @@ def make_nodes(deps: Deps) -> dict[str, Any]:
             "iteration": 0,
         }
 
+    def memory_retriever(state: DeepSearchState) -> dict[str, Any]:
+        return {"memory_brief": deps.memory(_view(state))}
+
     def plan_generator(state: DeepSearchState) -> dict[str, Any]:
         plan = deps.plan(_view(state))
         revisions = state.get("plan_revisions", 0) + (1 if state.get("research_plan") else 0)
@@ -113,6 +116,7 @@ def make_nodes(deps: Deps) -> dict[str, Any]:
 
     return {
         "intake": intake,
+        "memory_retriever": memory_retriever,
         "plan_generator": plan_generator,
         "plan_review": plan_review,
         "section_planner": section_planner,

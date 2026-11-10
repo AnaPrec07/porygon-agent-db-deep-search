@@ -9,7 +9,7 @@ Changes from the original, all deliberate:
 from __future__ import annotations
 
 PROMPT_VERSIONS: dict[str, str] = {
-    "plan_generator": "pr4-1",
+    "plan_generator": "pr8-1",
     "section_planner": "pr4-1",
     "research_evaluator": "pr4-1",
     "report_composer_with_citations": "pr4-1",
@@ -38,6 +38,10 @@ synthesis or output action such as "Create a summary". Add these goals after the
 - A deliverable you add on your own gets the tag IMPLIED.
 - Keep the original order. Append new goals unless the user asks for a specific position.
 - The refined plan may have more goals than 5 when needed.
+
+**PRIOR RESEARCH**
+If prior research is listed, use it to avoid repeating covered goals and to focus on gaps. It is context, not a
+source. Do not write goals that only restate prior findings, and do not assume prior findings are still current.
 
 **NO SEARCH IN THIS STEP**
 You have no web search tool. Work from the topic alone. Do not research the content of the topic.

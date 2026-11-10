@@ -17,6 +17,9 @@ from agent.deep_search.graph import build_graph
 from agent.deep_search.research.pipeline import ResearchServices
 from agent.memory.object_store import LocalObjectStore, UCVolumeObjectStore
 from agent.memory.recorder import Persistence
+from agent.memory.refresh import RefreshTrigger
+from agent.memory.retrieval import MemoryRetriever, SdkIndexClient
+from agent.memory.scope import Scope
 from agent.memory.writer import PersistenceWriter
 from databricks_agentkit import workspace_client, workspace_headers
 from databricks_agentkit.langgraph import (
@@ -96,12 +99,21 @@ def _check_databricks_auth() -> None:
         ) from e
 
 
-def _build_persistence(config: DeepSearchConfig) -> Persistence | None:
+def _build_scope(config: DeepSearchConfig, actor: str) -> Scope | None:
+    """The caller's access scope. None when no tenant is configured."""
+    if not config.tenant_id:
+        return None
+    return Scope(tenant_id=config.tenant_id, actor_id=actor, visibility=config.default_visibility)  # type: ignore[arg-type]
+
+
+def _build_persistence(config: DeepSearchConfig, scope: Scope | None) -> Persistence | None:
     """Return the record writer for the configured store, or None when persistence is disabled."""
     spec = config.object_store
     if spec is None:
         logger.warning("DEEP_SEARCH_OBJECT_STORE is not set; research records are not persisted")
         return None
+    if scope is None:
+        raise ValueError("DEEP_SEARCH_TENANT_ID is required when DEEP_SEARCH_OBJECT_STORE is set")
     if spec.startswith("local:"):
         store: Any = LocalObjectStore(spec[len("local:") :])
     elif spec == "uc_volume":
@@ -110,7 +122,29 @@ def _build_persistence(config: DeepSearchConfig) -> Persistence | None:
         store = UCVolumeObjectStore(_app_workspace_client(), config.records_volume)
     else:
         raise ValueError("DEEP_SEARCH_OBJECT_STORE must be local:<dir>, uc_volume, or unset")
-    return Persistence(PersistenceWriter(store), strict=config.persistence_strict)
+    on_complete = None
+    if config.refresh_job_id is not None:
+        on_complete = RefreshTrigger(
+            _app_workspace_client(), config.refresh_job_id, debounce_s=config.refresh_debounce_s
+        )
+    return Persistence(
+        PersistenceWriter(store),
+        strict=config.persistence_strict,
+        scope=scope,
+        on_session_complete=on_complete,
+    )
+
+
+def _build_memory(config: DeepSearchConfig, scope: Scope | None) -> Callable[[dict[str, Any]], dict[str, Any]] | None:
+    """Retrieval over the AI Search indexes, or None when memory is off (no tenant, or disabled)."""
+    if not config.memory_enabled or scope is None:
+        return None
+    retriever = MemoryRetriever(
+        SdkIndexClient(_app_workspace_client()),
+        {"facts": config.facts_index, "responses": config.responses_index, "activity": config.activity_index},
+        scope,
+    )
+    return lambda state: retriever.retrieve(state.get("research_topic", ""))
 
 
 def _build_search_provider(config: DeepSearchConfig, workspace: WorkspaceClient) -> Any | None:
@@ -153,14 +187,18 @@ async def create_agent_graph(
     outline, evaluation and composition call the model through the AI Gateway. Without one, the graph
     runs with stub nodes and logs a warning, so a stub run cannot pass as a real one.
 
-    ``actor`` and ``workspace_client_for`` are accepted but not used until PR-8 (memory) and PR-5 (search)
-    need them. The UI model override changes the worker model; the critic model keeps its setting.
+    ``actor`` sets the access scope for persisted records and memory retrieval. ``workspace_client_for`` is
+    accepted but unused. The UI model override changes the worker model; the critic model keeps its setting.
     """
-    del actor, workspace_client_for
+    del workspace_client_for  # per-user clients arrive with tool bindings (PR-5 uses service credentials)
     config = DeepSearchConfig.from_env()
     if model:
         config = replace(config, worker_model=model)
-    persistence = _build_persistence(config)
+    scope = _build_scope(config, actor)
+    persistence = _build_persistence(config, scope)
+    memory = _build_memory(config, scope)
+    if memory is None:
+        logger.info("memory retrieval is off: DEEP_SEARCH_TENANT_ID is not set or memory is disabled")
     if config.worker_model:
         workspace = _app_workspace_client()
         worker = _RoutedChatDatabricks(
@@ -189,10 +227,12 @@ async def create_agent_graph(
                 deliver_llm=worker,
                 config=config,
             )
-        deps = Deps.from_models(config, worker=worker, critic=critic, services=services)
+        deps = Deps.from_models(config, worker=worker, critic=critic, services=services, memory=memory)
     else:
         logger.warning("DEEP_SEARCH_WORKER_MODEL is not set; the deep-search graph is running with stub nodes")
         deps = Deps.stub(config)
+        if memory is not None:
+            deps = replace(deps, memory=memory)
     return build_graph(deps, persistence=persistence).compile(checkpointer=checkpointer())
 
 

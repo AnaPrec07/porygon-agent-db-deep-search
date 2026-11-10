@@ -33,4 +33,5 @@ class DeepSearchState(TypedDict, total=False):
     session_day: str
     persisted_files: Annotated[list[dict[str, Any]], operator.add]
     response_ids: list[str]
+    memory_brief: dict[str, Any]
     errors: Annotated[list[dict[str, Any]], operator.add]

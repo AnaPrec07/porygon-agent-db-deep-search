@@ -78,6 +78,15 @@ def test_every_silver_flow_keys_on_the_record_identity():
     assert targets["memory.final_responses"] == "response_id, response_version"
 
 
+def test_index_sources_take_scope_from_the_records_not_a_placeholder():
+    for relative in ["src/sql/facts_index_src.sql", "src/jobs/build_index_sources.py"]:
+        text = (PLATFORM / relative).read_text(encoding="utf-8")
+        assert "'unscoped'" not in text and '"unscoped"' not in text, relative
+    sql = (PLATFORM / "src/sql/facts_index_src.sql").read_text(encoding="utf-8")
+    assert "max_by(access_scope, ingested_at) AS access_scope" in sql
+    assert "last_verified_at" in sql
+
+
 def test_facts_index_sql_keeps_the_create_statement():
     from importlib import util
 

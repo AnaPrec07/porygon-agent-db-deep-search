@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "1.1"  # 1.1 adds tenant, actor, visibility and access_scope (additive)
 
 SessionStatus = Literal[
     "planning", "awaiting_approval", "researching", "composing", "completed", "cancelled", "failed"
@@ -18,7 +18,14 @@ class _Record(BaseModel):
     schema_version: str = SCHEMA_VERSION
 
 
-class ResearchSessionRecord(_Record):
+class _Scoped(_Record):
+    tenant_id: str = ""
+    actor_id: str = ""
+    visibility: Literal["private", "tenant"] = "private"
+    access_scope: str = ""
+
+
+class ResearchSessionRecord(_Scoped):
     record_type: Literal["research_session"] = "research_session"
     research_session_id: str
     session_version: int
@@ -33,7 +40,7 @@ class ResearchSessionRecord(_Record):
     error: str | None = None
 
 
-class TraceEventRecord(_Record):
+class TraceEventRecord(_Scoped):
     record_type: Literal["trace_event"] = "trace_event"
     trace_id: str
     research_session_id: str
@@ -49,7 +56,7 @@ class TraceEventRecord(_Record):
     error: str | None = None
 
 
-class SourceRecord(_Record):
+class SourceRecord(_Scoped):
     record_type: Literal["source"] = "source"
     source_id: str
     short_id: str
@@ -64,7 +71,7 @@ class SourceRecord(_Record):
     content_sha256: str | None = None
 
 
-class FactRecord(_Record):
+class FactRecord(_Scoped):
     record_type: Literal["fact"] = "fact"
     fact_id: str
     canonical_fact_key: str
@@ -92,7 +99,7 @@ class CitedSource(BaseModel):
     title: str
 
 
-class FinalResponseRecord(_Record):
+class FinalResponseRecord(_Scoped):
     record_type: Literal["final_response"] = "final_response"
     response_id: str
     response_version: int = 1
