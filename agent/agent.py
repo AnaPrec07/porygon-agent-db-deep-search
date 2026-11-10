@@ -15,6 +15,9 @@ from agent.deep_search.config import DeepSearchConfig
 from agent.deep_search.deps import Deps
 from agent.deep_search.graph import build_graph
 from agent.deep_search.research.pipeline import ResearchServices
+from agent.memory.object_store import LocalObjectStore, UCVolumeObjectStore
+from agent.memory.recorder import Persistence
+from agent.memory.writer import PersistenceWriter
 from databricks_agentkit import workspace_client, workspace_headers
 from databricks_agentkit.langgraph import (
     checkpointer,
@@ -93,6 +96,23 @@ def _check_databricks_auth() -> None:
         ) from e
 
 
+def _build_persistence(config: DeepSearchConfig) -> Persistence | None:
+    """Return the record writer for the configured store, or None when persistence is disabled."""
+    spec = config.object_store
+    if spec is None:
+        logger.warning("DEEP_SEARCH_OBJECT_STORE is not set; research records are not persisted")
+        return None
+    if spec.startswith("local:"):
+        store: Any = LocalObjectStore(spec[len("local:") :])
+    elif spec == "uc_volume":
+        if not config.records_volume:
+            raise ValueError("DEEP_SEARCH_RECORDS_VOLUME is required when DEEP_SEARCH_OBJECT_STORE=uc_volume")
+        store = UCVolumeObjectStore(_app_workspace_client(), config.records_volume)
+    else:
+        raise ValueError("DEEP_SEARCH_OBJECT_STORE must be local:<dir>, uc_volume, or unset")
+    return Persistence(PersistenceWriter(store), strict=config.persistence_strict)
+
+
 def _build_search_provider(config: DeepSearchConfig, workspace: WorkspaceClient) -> Any | None:
     """Return the configured search provider, or None when none is configured.
 
@@ -140,6 +160,7 @@ async def create_agent_graph(
     config = DeepSearchConfig.from_env()
     if model:
         config = replace(config, worker_model=model)
+    persistence = _build_persistence(config)
     if config.worker_model:
         workspace = _app_workspace_client()
         worker = _RoutedChatDatabricks(
@@ -172,7 +193,7 @@ async def create_agent_graph(
     else:
         logger.warning("DEEP_SEARCH_WORKER_MODEL is not set; the deep-search graph is running with stub nodes")
         deps = Deps.stub(config)
-    return build_graph(deps).compile(checkpointer=checkpointer())
+    return build_graph(deps, persistence=persistence).compile(checkpointer=checkpointer())
 
 
 async def recovery_input(

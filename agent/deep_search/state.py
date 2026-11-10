@@ -29,4 +29,8 @@ class DeepSearchState(TypedDict, total=False):
     extracted_urls: list[str]
     budget: dict[str, int]
     research_stats: dict[str, int]
+    sequence: int
+    session_day: str
+    persisted_files: Annotated[list[dict[str, Any]], operator.add]
+    response_ids: list[str]
     errors: Annotated[list[dict[str, Any]], operator.add]

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from langgraph.graph import END, START, StateGraph
 
 from agent.deep_search.deps import Deps
@@ -27,10 +29,16 @@ def route_after_evaluation(state: DeepSearchState, max_iterations: int) -> str:
     return "enhanced_search_executor"
 
 
-def build_graph(deps: Deps) -> StateGraph:
-    """Return the uncompiled graph. Callers compile it with a checkpointer."""
+def build_graph(deps: Deps, persistence: Any | None = None) -> StateGraph:
+    """Return the uncompiled graph. Callers compile it with a checkpointer.
+
+    ``persistence`` (agent.memory.recorder.Persistence) wraps every node so its records are written.
+    """
     builder = StateGraph(DeepSearchState)
-    for name, node in make_nodes(deps).items():
+    nodes = make_nodes(deps)
+    if persistence is not None:
+        nodes = persistence.wrap_nodes(nodes)
+    for name, node in nodes.items():
         builder.add_node(name, node)
 
     max_iterations = deps.config.max_search_iterations
