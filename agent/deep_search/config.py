@@ -22,6 +22,9 @@ class DeepSearchConfig:
     tavily_mcp_url: str | None = None
     tavily_search_tool: str = "tavily_search"
     tavily_extract_tool: str = "tavily_extract"
+    object_store: str | None = None  # local:<dir> | uc_volume | None (persistence disabled)
+    records_volume: str | None = None  # /Volumes/<catalog>/<schema>/<volume> for uc_volume
+    persistence_strict: bool = True
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> DeepSearchConfig:
@@ -54,4 +57,7 @@ class DeepSearchConfig:
             tavily_mcp_url=source.get("DEEP_SEARCH_TAVILY_MCP_URL") or None,
             tavily_search_tool=source.get("DEEP_SEARCH_TAVILY_SEARCH_TOOL") or "tavily_search",
             tavily_extract_tool=source.get("DEEP_SEARCH_TAVILY_EXTRACT_TOOL") or "tavily_extract",
+            object_store=(source.get("DEEP_SEARCH_OBJECT_STORE") or "").strip() or None,
+            records_volume=source.get("DEEP_SEARCH_RECORDS_VOLUME") or None,
+            persistence_strict=source.get("DEEP_SEARCH_PERSISTENCE_STRICT", "true").strip().lower() != "false",
         )
