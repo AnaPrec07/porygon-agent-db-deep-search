@@ -621,16 +621,39 @@ function interruptSummary(interrupt) {
     .join(" · ");
 }
 
+function setApprovalLabels(interrupt) {
+  const labels = DeepSearchReview.approvalLabels(interrupt);
+  elements.approveAction.textContent = labels.approve;
+  elements.rejectAction.textContent = labels.reject;
+}
+
+function addTimelineEntry(event) {
+  const list = document.querySelector("#research-timeline");
+  if (!list) return;
+  const item = document.createElement("li");
+  item.textContent = DeepSearchReview.timelineLabel(event);
+  list.append(item);
+}
+
 function handleInterrupt(interrupt) {
   finishDraft();
   state.pendingInterrupt = interrupt;
-  elements.approvalSummary.textContent = interruptSummary(interrupt);
+  setApprovalLabels(interrupt);
+  if (DeepSearchReview.isPlanReview(interrupt)) {
+    elements.approvalSummary.textContent =
+      `Proposed plan:\n${DeepSearchReview.planText(interrupt)}\n\n` +
+      "Approve to start research, cancel to stop, or type changes in the message box and send them to revise.";
+    appendMessage("system", "Plan ready for review.", "Plan review");
+  } else {
+    elements.approvalSummary.textContent = interruptSummary(interrupt);
+    appendMessage("system", interruptSummary(interrupt), "Approval required");
+  }
   elements.approvalPanel.hidden = false;
-  appendMessage("system", interruptSummary(interrupt), "Approval required");
 }
 
 function handleEvent(event) {
   addEvent(event?.type || "event", event);
+  if (event?.type === "research_event") addTimelineEntry(event);
   if (event?.type === "delta") appendDelta(event.content);
   if (event?.type === "message") handleAgentMessage(event.message);
   if (event?.type === "interrupt") handleInterrupt(event);
@@ -1291,11 +1314,13 @@ async function resume(decision) {
     appendError(new Error("No paused run is loaded for the current routing session."));
     return;
   }
-  const payload =
-    decision === "approve"
-      ? { resume: { decisions: [{ type: "approve" }] } }
-      : { resume: { decisions: [{ type: "reject", message: "Rejected from the Agent Bricks demo UI." }] } };
-  appendMessage("system", decision === "approve" ? "Approved pending tool call." : "Rejected pending tool call.", "Human decision");
+  const planReview = DeepSearchReview.isPlanReview(state.pendingInterrupt);
+  const payload = DeepSearchReview.resumePayload(decision, state.pendingInterrupt);
+  if (planReview) {
+    appendMessage("system", decision === "approve" ? "Plan approved. Starting research." : "Research cancelled.", "Human decision");
+  } else {
+    appendMessage("system", decision === "approve" ? "Approved pending tool call." : "Rejected pending tool call.", "Human decision");
+  }
   setBusy(true, "Resuming");
   try {
     await dispatch(payload, "streaming");
@@ -1309,6 +1334,7 @@ async function resume(decision) {
 
 function clearChat({ recordEvent = true } = {}) {
   state.pendingInterrupt = null;
+  document.querySelector("#research-timeline")?.replaceChildren();
   state.draft = null;
   state.draftText = "";
   state.lastAssistantText = "";

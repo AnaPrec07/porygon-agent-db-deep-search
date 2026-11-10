@@ -2090,3 +2090,23 @@ h2 {
   color: var(--ink-faint);
   font-size: 12px;
 }
+
+/* Plan review and research timeline (PR-9) */
+.approval-panel #approval-summary {
+  white-space: pre-wrap;
+}
+
+.research-progress {
+  margin: 0.75rem 0;
+}
+
+.research-progress h3 {
+  font-size: 0.95rem;
+  margin: 0 0 0.25rem;
+}
+
+.research-progress ol {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-size: 0.9rem;
+}

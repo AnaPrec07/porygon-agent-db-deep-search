@@ -114,13 +114,38 @@ async def _invoke_agent(
     }
 
 
+NODE_TITLES = {
+    "intake": "Starting research",
+    "memory_retriever": "Checking prior research",
+    "plan_generator": "Drafting the research plan",
+    "plan_review": "Waiting for plan approval",
+    "section_planner": "Outlining the report",
+    "section_researcher": "Researching",
+    "research_evaluator": "Evaluating findings",
+    "enhanced_search_executor": "Refining research",
+    "report_composer_with_citations": "Writing the report",
+    "citation_processor": "Resolving citations",
+    "response_finalizer": "Finishing",
+    "finalize_cancelled": "Cancelled",
+}
+
+
+def _research_event(node: str, status: str = "completed") -> dict:
+    return {"type": "research_event", "agent_name": node, "title": NODE_TITLES.get(node, node), "status": status}
+
+
 async def _serialize_events(async_stream: AsyncIterator[Any]) -> AsyncGenerator[dict, None]:
     async for mode, payload in async_stream:
         if mode == "updates":
             if interrupts := payload.get("__interrupt__"):
                 for item in interrupts:
+                    if isinstance(item.value, dict) and item.value.get("type") == "plan_review":
+                        yield _research_event("plan_review", "waiting")
                     yield {"type": "interrupt", "id": item.id, "value": item.value}
                 continue
+            for node_name in payload:
+                if not str(node_name).startswith("__"):
+                    yield _research_event(str(node_name))
             for node_data in payload.values():
                 messages = node_data.get("messages", []) if isinstance(node_data, dict) else []
                 for message in messages:
