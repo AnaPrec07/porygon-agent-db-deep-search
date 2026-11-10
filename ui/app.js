@@ -967,7 +967,7 @@ function renderTools(payload) {
   if (!local.length) {
     const empty = document.createElement("div");
     empty.className = "tools-empty";
-    empty.textContent = "No Python tools found in agent/tools.";
+    empty.textContent = "The deep-search graph uses no Python tools.";
     elements.toolsBody.append(empty);
   }
   for (const tool of local) elements.toolsBody.append(toolRow(null, tool.name, tool.description));

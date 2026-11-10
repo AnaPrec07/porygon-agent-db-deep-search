@@ -10,8 +10,6 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-from agent.tools import all_tools
-from langchain_core.tools import BaseTool
 from runtime.adapter import _serialize_events
 
 from databricks_agentkit.langgraph.session_store import (
@@ -19,21 +17,6 @@ from databricks_agentkit.langgraph.session_store import (
     invocation_metadata,
     thread_config,
 )
-
-
-def test_tools_autoregister():
-    tools = all_tools()
-    assert tools, "expected the sample tool to auto-register"
-    assert all(isinstance(t, BaseTool) for t in tools)
-    assert {"get_current_time", "send_message"} <= {t.name for t in tools}
-
-
-def test_gated_tool_is_in_require_approval():
-    # The gated demo tool must exist and be listed for approval, or the HITL demo does nothing.
-    from agent.agent import REQUIRE_APPROVAL
-
-    assert REQUIRE_APPROVAL.get("send_message")
-    assert "send_message" in {t.name for t in all_tools()}
 
 
 class _FakeInterrupt:

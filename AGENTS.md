@@ -30,9 +30,13 @@ requests. Exit 75 means it is still deploying; run the same command again. Don't
 | Change | File |
 | --- | --- |
 | Framework-native agent and `run_agent` | `agent/agent.py` |
-| Local tools | `agent/tools/` |
-| MCP servers | `agent/mcps.py` |
-| Managed runtime `invoke`/`recover` hooks and input/output translation | `runtime/adapter.py` |
+| Deep-search graph (nodes, state, routing) | `agent/deep_search/` |
+| Research: search, verification, pipeline | `agent/deep_search/research/` |
+| Persisted records, scope and retrieval | `agent/memory/` |
+| Data platform (pipeline, job, index sync) | `platform/` |
+| Infrastructure (AWS, Unity Catalog) | `infra/` |
+| Evaluation harness | `evals/` |
+| Managed runtime `invoke`/`recover` hooks, input/output translation, node events | `runtime/adapter.py` |
 | `DurableAgentServer` construction and hook registration | `runtime/main.py` |
 | Browser and managed-state routes | `runtime/ui.py` |
 | Browser behavior | `ui/app.js` |

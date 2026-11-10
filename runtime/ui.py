@@ -244,14 +244,8 @@ def _connected_tools() -> list[dict[str, str]]:
 
 
 def _local_tools() -> list[dict[str, str]]:
-    """The Python tools the agent is built with (``agent.tools.all_tools()``), imported lazily."""
-    from agent.tools import all_tools
-
-    local = []
-    for tool in all_tools():
-        lines = (getattr(tool, "description", "") or "").strip().splitlines()
-        local.append({"name": tool.name, "description": lines[0].strip() if lines else ""})
-    return local
+    """Python tools the deep-search graph is built with. None: the graph's work happens in its nodes (PR-11)."""
+    return []
 
 
 def _tools() -> dict[str, Any]:
@@ -262,11 +256,7 @@ def _tools() -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001 - surface a bad agent.toml in the pane, not as a 500
         connected = []
         errors.append({"section": "connected", "message": str(exc)})
-    try:
-        local = _local_tools()
-    except Exception as exc:  # noqa: BLE001 - surface a broken agent.tools import in the pane
-        local = []
-        errors.append({"section": "local", "message": f"Could not load agent.tools: {exc}"})
+    local = _local_tools()
     return {
         "connected": connected,
         "local": local,

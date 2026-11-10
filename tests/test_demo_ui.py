@@ -589,7 +589,7 @@ def test_demo_tools_route_lists_bindings_local_tools_and_add_commands(monkeypatc
             "auth": "user",
         }
     ]
-    assert {"get_current_time", "send_message"} <= {tool["name"] for tool in payload["local"]}
+    assert payload["local"] == []  # the deep-search graph has no Python tools
     assert [entry["command"] for entry in payload["add_commands"]] == [
         "agentbricks tools add mcp system.ai.web_search",
         "agentbricks tools add uc-function catalog.schema.function",

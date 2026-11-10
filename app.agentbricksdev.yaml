@@ -9,3 +9,10 @@ env:
   value: agent-langgraph
 - name: DATABRICKS_AGENTBRICKS_RUNTIME_STORE_LOCAL
   value: 'true'
+# Local development: records go to ./.deep_search_data, retrieval is off, and no model is set (stub nodes run).
+- name: DEEP_SEARCH_OBJECT_STORE
+  value: local:.deep_search_data
+- name: DEEP_SEARCH_TENANT_ID
+  value: dev-local
+- name: DEEP_SEARCH_MEMORY_ENABLED
+  value: 'false'

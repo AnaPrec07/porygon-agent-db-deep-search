@@ -7,9 +7,7 @@ from typing import Any
 
 from databricks.sdk import WorkspaceClient
 from databricks_langchain import ChatDatabricks
-from langchain.agents.middleware.human_in_the_loop import HITLResponse
 from langgraph.types import Command
-from pydantic import TypeAdapter, ValidationError
 
 from agent.deep_search.config import DeepSearchConfig
 from agent.deep_search.deps import Deps
@@ -32,21 +30,11 @@ from databricks_agentkit.langgraph.session_store import (
     invocation_id_from_metadata,
     invocation_metadata,
 )
-from databricks_agentkit.runtime.auth import AuthError
 from databricks_agentkit.runtime.tool_manifest import resolve_model_service
 
 logger = logging.getLogger(__name__)
 
 MODEL = resolve_model_service() or "system.ai.meta-llama-3-1-8b-instruct"  # consumed by PR-4 LLM nodes
-
-# Template approval gate for the sample tools in agent/tools. The deep-search graph does not use these tools
-# (removed in PR-11); the constant stays so the template's tool tests keep their contract.
-# Tools that require human approval before they run. Map a tool name to True to allow every decision
-# (approve / edit / reject / respond), or to a config dict to restrict them (see HumanInTheLoopMiddleware).
-# When a listed tool is about to run, the agent pauses and emits an `interrupt` event; the client
-# resumes by sending `resume` with the same session id. Empty this dict to disable approval gating.
-REQUIRE_APPROVAL = {"send_message": True}
-
 
 class _RoutedChatDatabricks(ChatDatabricks):
     """Forward account-host workspace routing to the underlying OpenAI clients."""
@@ -255,36 +243,6 @@ async def recovery_input(
     return None if current_invocation_checkpointed else agent_input
 
 
-async def _validate_approval_resume(graph: Any, config: dict, agent_input: Any) -> None:
-    """Reject malformed middleware decisions before LangGraph checkpoints the resume value."""
-    if not isinstance(agent_input, Command) or agent_input.resume is None:
-        return
-    state = await graph.aget_state(config)
-    pending = [item for task in state.tasks for item in task.interrupts]
-    resume = agent_input.resume
-    keyed = isinstance(resume, dict) and any(item.id in resume for item in pending)
-    for item in pending:
-        if not isinstance(item.value, dict) or "review_configs" not in item.value:
-            continue  # Application-defined interrupts keep their native resume contract.
-        if keyed and item.id not in resume:
-            continue
-        response = resume[item.id] if keyed else resume
-        try:
-            decisions = TypeAdapter(HITLResponse).validate_python(response)["decisions"]
-        except ValidationError as error:
-            raise AuthError(
-                "INVALID_APPROVAL", "Invalid approval decision payload.", 400
-            ) from error
-        reviews = item.value["review_configs"]
-        if len(decisions) != len(reviews) or any(
-            decision["type"] not in review["allowed_decisions"]
-            for decision, review in zip(decisions, reviews, strict=True)
-        ):
-            raise AuthError(
-                "INVALID_APPROVAL", "Provide one allowed decision per pending tool call.", 400
-            )
-
-
 async def run_agent(
     agent_input: Any,
     *,
@@ -308,8 +266,6 @@ async def run_agent(
     config = thread_config(session_id, actor)
     if invocation_id:
         config["metadata"] = invocation_metadata(invocation_id)
-
-    await _validate_approval_resume(graph, config, agent_input)
 
     last_update: Any = None
     with start_trace(name="invoke", inputs=agent_input, session_id=session_id) as span:

@@ -11,6 +11,14 @@ env:
   value: store
 - name: AGENT_SESSION_STORE
   value: my-agent-sessions
+# Deep Search defaults that do not depend on the workspace. Per-environment values (tenant, search provider and
+# connection, object store and volume paths, models, refresh job) are set in the deployment environment. See README.
+- name: DEEP_SEARCH_MAX_SEARCH_ITERATIONS
+  value: '5'
+- name: DEEP_SEARCH_PERSISTENCE_STRICT
+  value: 'true'
+- name: DEEP_SEARCH_DEFAULT_VISIBILITY
+  value: private
 - name: PIP_INDEX_URL
   value: https://pypi.org/simple/
 - name: UV_INDEX_URL
