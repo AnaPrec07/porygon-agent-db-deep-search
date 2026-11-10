@@ -70,3 +70,23 @@ class ReportOutline(BaseModel):
 
     def render(self) -> str:
         return "\n\n".join(f"# {s.title.strip()}\n{s.overview.strip()}" for s in self.sections)
+
+
+class GoalQueries(BaseModel):
+    goal_id: str = Field(min_length=1, description="Id of the research goal these queries serve, for example g1.")
+    queries: list[SearchQuery] = Field(min_length=1, max_length=10)
+
+
+class QueryPlan(BaseModel):
+    goals: list[GoalQueries] = Field(min_length=1)
+
+
+class ExtractedFact(BaseModel):
+    goal_id: str = Field(min_length=1, description="Research goal id this fact serves, or 'general'.")
+    fact_text: str = Field(min_length=10, max_length=400, description="One self-contained fact stated by the page.")
+    quote: str = Field(min_length=5, max_length=500, description="Verbatim text from the page that supports the fact.")
+    time_sensitivity: Literal["static", "slow", "volatile"] = "static"
+
+
+class ExtractedFacts(BaseModel):
+    facts: list[ExtractedFact] = Field(default_factory=list, max_length=12)

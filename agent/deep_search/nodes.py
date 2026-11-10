@@ -79,7 +79,7 @@ def make_nodes(deps: Deps) -> dict[str, Any]:
         return {"report_sections": deps.outline(_view(state))}
 
     def section_researcher(state: DeepSearchState) -> dict[str, Any]:
-        return {"section_research_findings": deps.research(_view(state)), "iteration": 0}
+        return {**deps.research(_view(state)), "iteration": 0}
 
     def research_evaluator(state: DeepSearchState) -> dict[str, Any]:
         feedback = Feedback.model_validate(deps.evaluate(_view(state)))
@@ -89,7 +89,7 @@ def make_nodes(deps: Deps) -> dict[str, Any]:
         }
 
     def enhanced_search_executor(state: DeepSearchState) -> dict[str, Any]:
-        return {"section_research_findings": deps.refine(_view(state))}
+        return deps.refine(_view(state))
 
     def report_composer_with_citations(state: DeepSearchState) -> dict[str, Any]:
         return {"final_cited_report": deps.compose(_view(state)), "phase": "composing"}
