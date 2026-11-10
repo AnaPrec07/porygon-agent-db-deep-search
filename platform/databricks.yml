@@ -1,0 +1,33 @@
+# Databricks Asset Bundle for the Deep Search data platform (plan §M.6, PR-7).
+# Scope: the memory pipeline, the refresh job and the AI Search sync. Catalog, schemas, volumes and grants live in
+# infra/databricks (Terraform, PR-2). The app itself deploys with `agentbricks deploy`.
+bundle:
+  name: deep_search_platform
+
+include:
+  - resources/*.yml
+
+variables:
+  catalog:
+    description: Unity Catalog catalog created by infra/databricks.
+    default: deep_search
+  records_volume:
+    description: Volume path that holds the app's record files (its records/ folder is the root of the v1 layout).
+    default: /Volumes/deep_search/landing/records
+  pipeline_service_principal_id:
+    description: Application ID of the service principal that runs the pipeline and job.
+  facts_index:
+    default: deep_search.memory.facts_idx
+  responses_index:
+    default: deep_search.memory.responses_idx
+  activity_index:
+    default: deep_search.memory.activity_idx
+
+targets:
+  dev:
+    mode: development
+    default: true
+  prod:
+    mode: production
+    run_as:
+      service_principal_name: ${var.pipeline_service_principal_id}
