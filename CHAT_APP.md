@@ -20,10 +20,10 @@ entries (searchable, filterable by actor, with a modal for each entry); the othe
 in place, and Traces links out to the MLflow experiment. The transport selector is the only manual
 capability choice; hover or focus a mode to see what it does.
 
-Tools opens a pane listing the `agent.toml` bindings, the Python tools from `agent.tools.all_tools()`,
+Tools opens a pane listing the `agent.toml` bindings and the Python tools the agent is built with (none for the deep-search graph),
 and the `agentbricks tools add …` commands to copy. It reads `GET /api/demo/tools`, which re-reads
 `agent.toml` on each request, so `tools add`/`remove` show up after a refresh. A bad `agent.toml` or
-`agent.tools` import shows as an error in the pane. MCP servers from `agent/mcps.py` are not listed.
+The deep-search graph reads its search provider from configuration, not from the Tools pane.
 
 The composer's model picker lists the workspace's Unity Catalog AI Gateway chat model services — the
 `system.ai.*` model services from `GET /api/2.1/unity-catalog/model-services?parent=schemas/system.ai`

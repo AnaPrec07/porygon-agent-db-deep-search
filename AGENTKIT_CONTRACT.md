@@ -35,10 +35,10 @@ that make later bindings ineffective.
 
 ### Tools
 
-Use `databricks_agentkit.langgraph.mcp_tools()` for MCP, UC function, and sandbox bindings, combining
-them with existing servers without duplicates. It applies sandbox downscoping. Local Python tools
-belong in source; the template discovers `BaseTool` objects through
-[agent/tools/__init__.py](agent/tools/__init__.py).
+The deep-search graph uses no `mcp_tools()`, `memory_tools()` or Python `BaseTool`s. It calls its search provider
+directly (`agent/deep_search/research/`), and its memory comes from the `agent/memory` package. A project that
+adds tools back should use `databricks_agentkit.langgraph.mcp_tools()` and feed the result into both model
+definitions and graph execution.
 
 Feed selected tools into both model definitions and graph execution while preserving approval
 policy. New bindings must become effective on the next graph construction or restart without
@@ -51,7 +51,8 @@ graph run. The helper selects the bound Session Store or an in-process saver; ex
 and environment overrides take precedence. It caches the saver per process, so restart after a
 binding change. The application state must be serializable by the selected saver.
 
-Include `memory_tools(actor)` in model and execution wiring. It returns no tools when unconfigured.
+The deep-search graph does not include `memory_tools(actor)`. Its research memory is persisted through `agent/memory`
+and retrieved from AI Search, scoped by the same actor (see `docs/MIGRATION_PLAN.md`, ADR-21).
 Its closures capture actor identity, so never reuse them across users. The application owns trusted
 actor/tenant authentication; a payload field alone does not establish identity. The
 template adapter reads `input.actor` and defaults it to the session ID, so memory carries across
