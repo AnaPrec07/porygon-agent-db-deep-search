@@ -13,6 +13,8 @@ from typing import Any
 
 from agent.deep_search import llm_nodes
 from agent.deep_search.config import DeepSearchConfig
+from agent.deep_search.research import pipeline
+from agent.deep_search.research.pipeline import ResearchServices
 
 StateView = dict[str, Any]
 
@@ -43,17 +45,18 @@ def _stub_outline(state: StateView) -> str:
     )
 
 
-def _stub_research(state: StateView) -> str:
-    return f"Stub findings for: {state.get('research_topic', '')}."
+def _stub_research(state: StateView) -> dict[str, Any]:
+    return {"section_research_findings": f"Stub findings for: {state.get('research_topic', '')}."}
 
 
 def _stub_evaluate(state: StateView) -> dict[str, Any]:
     return {"grade": "pass", "comment": "Stub evaluator accepts the findings.", "follow_up_queries": None}
 
 
-def _stub_refine(state: StateView) -> str:
+def _stub_refine(state: StateView) -> dict[str, Any]:
     # Merge, never replace: earlier findings stay in place (plan requirement P8).
-    return f"{state.get('section_research_findings', '')}\n\nStub refinement pass."
+    findings = f"{state.get('section_research_findings', '')}\n\nStub refinement pass."
+    return {"section_research_findings": findings}
 
 
 def _stub_compose(state: StateView) -> str:
@@ -65,21 +68,36 @@ class Deps:
     config: DeepSearchConfig
     plan: Callable[[StateView], str]
     outline: Callable[[StateView], str]
-    research: Callable[[StateView], str]
+    research: Callable[[StateView], dict[str, Any]]
     evaluate: Callable[[StateView], dict[str, Any]]
-    refine: Callable[[StateView], str]
+    refine: Callable[[StateView], dict[str, Any]]
     compose: Callable[[StateView], str]
 
     @classmethod
-    def from_models(cls, config: DeepSearchConfig, *, worker: Any, critic: Any) -> Deps:
-        """Use LLM-backed plan, outline, evaluation and composition; research and refinement stay stubs (PR-5)."""
-        return replace(
+    def from_models(
+        cls,
+        config: DeepSearchConfig,
+        *,
+        worker: Any,
+        critic: Any,
+        services: ResearchServices | None = None,
+    ) -> Deps:
+        """LLM-backed plan, outline, evaluation and composition. With ``services``, research and refinement
+        use search, extraction and verification (PR-5). Without them, those two stay stubs."""
+        deps = replace(
             cls.stub(config),
             plan=lambda state: llm_nodes.plan_with_llm(worker, state),
             outline=lambda state: llm_nodes.outline_with_llm(worker, state),
             evaluate=lambda state: llm_nodes.evaluate_with_llm(critic, state),
             compose=lambda state: llm_nodes.compose_with_llm(critic, state),
         )
+        if services is not None:
+            deps = replace(
+                deps,
+                research=lambda state: pipeline.run_research(state, services),
+                refine=lambda state: pipeline.run_refine(state, services),
+            )
+        return deps
 
     @classmethod
     def stub(cls, config: DeepSearchConfig | None = None) -> Deps:

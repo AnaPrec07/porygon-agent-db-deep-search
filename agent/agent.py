@@ -14,6 +14,7 @@ from pydantic import TypeAdapter, ValidationError
 from agent.deep_search.config import DeepSearchConfig
 from agent.deep_search.deps import Deps
 from agent.deep_search.graph import build_graph
+from agent.deep_search.research.pipeline import ResearchServices
 from databricks_agentkit import workspace_client, workspace_headers
 from databricks_agentkit.langgraph import (
     checkpointer,
@@ -92,6 +93,34 @@ def _check_databricks_auth() -> None:
         ) from e
 
 
+def _build_search_provider(config: DeepSearchConfig, workspace: WorkspaceClient) -> Any | None:
+    """Return the configured search provider, or None when none is configured.
+
+    Misconfiguration fails here, at graph build, instead of appearing later as failed searches.
+    """
+    if config.search_provider is None:
+        return None
+    if config.search_provider == "tavily_mcp":
+        if not config.tavily_mcp_url:
+            raise ValueError("DEEP_SEARCH_TAVILY_MCP_URL is required when DEEP_SEARCH_SEARCH_PROVIDER=tavily_mcp")
+        from databricks_mcp import DatabricksMCPClient
+
+        from agent.deep_search.research.providers import TavilyMcpProvider
+
+        client = DatabricksMCPClient(server_url=config.tavily_mcp_url, workspace_client=workspace)
+        return TavilyMcpProvider(
+            client,
+            search_tool=config.tavily_search_tool,
+            extract_tool=config.tavily_extract_tool,
+        )
+    from agent.deep_search.research.providers import TavilyHttpProvider
+
+    key = os.getenv("TAVILY_API_KEY")
+    if not key:
+        raise ValueError("TAVILY_API_KEY is required when DEEP_SEARCH_SEARCH_PROVIDER=tavily_http")
+    return TavilyHttpProvider(key)
+
+
 async def create_agent_graph(
     actor: str,
     model: str | None = None,
@@ -122,7 +151,24 @@ async def create_agent_graph(
             )
         else:
             critic = worker
-        deps = Deps.from_models(config, worker=worker, critic=critic)
+        extractor = worker
+        if config.extraction_model and config.extraction_model != config.worker_model:
+            extractor = _RoutedChatDatabricks(
+                endpoint=config.extraction_model, workspace_client=workspace, use_ai_gateway=True
+            )
+        search = _build_search_provider(config, workspace)
+        services = None
+        if search is None:
+            logger.warning("DEEP_SEARCH_SEARCH_PROVIDER is not set; research and refinement use stub nodes")
+        else:
+            services = ResearchServices(
+                search=search,
+                query_llm=worker,
+                extract_llm=extractor,
+                deliver_llm=worker,
+                config=config,
+            )
+        deps = Deps.from_models(config, worker=worker, critic=critic, services=services)
     else:
         logger.warning("DEEP_SEARCH_WORKER_MODEL is not set; the deep-search graph is running with stub nodes")
         deps = Deps.stub(config)

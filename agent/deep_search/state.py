@@ -25,4 +25,8 @@ class DeepSearchState(TypedDict, total=False):
     final_cited_report: str
     final_report_with_citations: str
     citation_stats: dict[str, int]
+    facts: list[dict[str, Any]]
+    extracted_urls: list[str]
+    budget: dict[str, int]
+    research_stats: dict[str, int]
     errors: Annotated[list[dict[str, Any]], operator.add]

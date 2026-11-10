@@ -90,3 +90,36 @@ CITATION_RULE_WITH_SOURCES = (
 CITATION_RULE_NO_SOURCES = (
     "No citation sources are available for this report. Do not write any <cite> tags and do not invent sources."
 )
+
+
+QUERY_SYSTEM = """\
+You are a research planner. For each research goal listed, write up to {n} targeted web search queries that
+cover the goal from several angles. Each query must be specific enough to return relevant pages.
+Return one entry per goal, using the goal id exactly as given.
+"""
+
+EXTRACTION_SYSTEM = """\
+You extract facts from one web page for a research topic.
+
+1. Extract only facts the page states directly. Do not infer, estimate, or add knowledge from memory.
+2. For each fact, copy a verbatim quote (up to 300 characters) from the page that supports it. The quote must
+   appear exactly as written in the page text.
+3. Assign each fact to the research goal id it serves, or to "general" if none fits.
+4. Set time_sensitivity to "static" for facts that do not change, "slow" for facts that change over years,
+   and "volatile" for facts that change over months or less.
+5. Return at most 12 facts. Return none if the page is not relevant to the topic.
+"""
+
+DELIVERABLE_SYSTEM = """\
+Produce the deliverable described below. Use ONLY the research findings provided. Do not search and do not add
+facts from memory. Keep any citation tags exactly as they appear in the findings. If the findings do not
+support part of the deliverable, say so plainly.
+"""
+
+PROMPT_VERSIONS.update(
+    {
+        "query_planner": "pr5-1",
+        "fact_extractor": "pr5-1",
+        "deliverable_builder": "pr5-1",
+    }
+)
