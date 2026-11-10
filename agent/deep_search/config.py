@@ -25,6 +25,14 @@ class DeepSearchConfig:
     object_store: str | None = None  # local:<dir> | uc_volume | None (persistence disabled)
     records_volume: str | None = None  # /Volumes/<catalog>/<schema>/<volume> for uc_volume
     persistence_strict: bool = True
+    tenant_id: str | None = None
+    default_visibility: str = "private"  # private | tenant
+    memory_enabled: bool = True
+    facts_index: str = "deep_search.memory.facts_idx"
+    responses_index: str = "deep_search.memory.responses_idx"
+    activity_index: str = "deep_search.memory.activity_idx"
+    refresh_job_id: int | None = None
+    refresh_debounce_s: float = 120.0
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> DeepSearchConfig:
@@ -60,4 +68,12 @@ class DeepSearchConfig:
             object_store=(source.get("DEEP_SEARCH_OBJECT_STORE") or "").strip() or None,
             records_volume=source.get("DEEP_SEARCH_RECORDS_VOLUME") or None,
             persistence_strict=source.get("DEEP_SEARCH_PERSISTENCE_STRICT", "true").strip().lower() != "false",
+            tenant_id=(source.get("DEEP_SEARCH_TENANT_ID") or "").strip() or None,
+            default_visibility=(source.get("DEEP_SEARCH_DEFAULT_VISIBILITY") or "private").strip(),
+            memory_enabled=source.get("DEEP_SEARCH_MEMORY_ENABLED", "true").strip().lower() != "false",
+            facts_index=source.get("DEEP_SEARCH_AI_SEARCH_FACTS_INDEX") or "deep_search.memory.facts_idx",
+            responses_index=source.get("DEEP_SEARCH_AI_SEARCH_RESPONSES_INDEX") or "deep_search.memory.responses_idx",
+            activity_index=source.get("DEEP_SEARCH_AI_SEARCH_ACTIVITY_INDEX") or "deep_search.memory.activity_idx",
+            refresh_job_id=int(source["DEEP_SEARCH_REFRESH_JOB_ID"]) if source.get("DEEP_SEARCH_REFRESH_JOB_ID") else None,
+            refresh_debounce_s=float(source.get("DEEP_SEARCH_REFRESH_DEBOUNCE_S", "120")),
         )

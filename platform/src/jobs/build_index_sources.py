@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS {catalog}.memory.response_chunks_index_src (
   research_topic STRING,
   user_query STRING,
   generated_at STRING,
+  tenant_id STRING,
   access_scope STRING
 ) TBLPROPERTIES (delta.enableChangeDataFeed = true)
 """
@@ -47,6 +48,7 @@ CREATE TABLE IF NOT EXISTS {catalog}.memory.activity_summaries_index_src (
   summary_text STRING,
   fact_count INT,
   status STRING,
+  tenant_id STRING,
   access_scope STRING
 ) TBLPROPERTIES (delta.enableChangeDataFeed = true)
 """
@@ -77,7 +79,8 @@ def build_response_chunks(spark, catalog: str) -> int:
     spark.sql(CHUNK_DDL.format(catalog=catalog))
     rows = spark.sql(
         f"""
-        SELECT response_id, response_version, research_topic, user_query, generated_at, final_response
+        SELECT response_id, response_version, research_topic, user_query, generated_at, final_response,
+               tenant_id, access_scope
         FROM {catalog}.memory.final_responses
         QUALIFY row_number() OVER (PARTITION BY response_id ORDER BY response_version DESC) = 1
         """
@@ -97,7 +100,8 @@ def build_response_chunks(spark, catalog: str) -> int:
                     "research_topic": row["research_topic"],
                     "user_query": row["user_query"],
                     "generated_at": row["generated_at"],
-                    "access_scope": "unscoped",
+                    "tenant_id": row["tenant_id"],
+                    "access_scope": row["access_scope"],
                 }
             )
     _merge_from_rows(
@@ -106,7 +110,7 @@ def build_response_chunks(spark, catalog: str) -> int:
         "chunk_id",
         chunk_rows,
         ["chunk_id", "chunk_index", "chunk_heading", "chunk_text", "response_id", "response_version",
-         "is_latest_version", "research_topic", "user_query", "generated_at", "access_scope"],
+         "is_latest_version", "research_topic", "user_query", "generated_at", "tenant_id", "access_scope"],
     )
     return len(chunk_rows)
 
@@ -116,7 +120,7 @@ def build_activity_summaries(spark, catalog: str) -> int:
     rows = spark.sql(
         f"""
         SELECT t.research_session_id, t.agent_name, s.research_topic, t.event_type, t.status,
-               t.action, t.decision_summary
+               t.action, t.decision_summary, s.tenant_id, s.access_scope
         FROM {catalog}.memory.trace_events t
         LEFT JOIN {catalog}.memory.research_sessions s USING (research_session_id)
         """
@@ -124,7 +128,9 @@ def build_activity_summaries(spark, catalog: str) -> int:
     grouped: dict[tuple[str, str], dict] = {}
     for row in rows:
         key = (row["research_session_id"], row["agent_name"])
-        entry = grouped.setdefault(key, {"topic": row["research_topic"] or "", "events": []})
+        entry = grouped.setdefault(
+            key, {"topic": row["research_topic"] or "", "tenant": row["tenant_id"], "scope": row["access_scope"], "events": []}
+        )
         entry["events"].append(row)
     summary_rows = []
     for (session_id, agent), entry in grouped.items():
@@ -150,7 +156,8 @@ def build_activity_summaries(spark, catalog: str) -> int:
                 "summary_text": text,
                 "fact_count": 0,
                 "status": status,
-                "access_scope": "unscoped",
+                "tenant_id": entry["tenant"],
+                "access_scope": entry["scope"],
             }
         )
     _merge_from_rows(
@@ -159,7 +166,7 @@ def build_activity_summaries(spark, catalog: str) -> int:
         "activity_id",
         summary_rows,
         ["activity_id", "research_session_id", "agent_name", "research_topic", "summary_text",
-         "fact_count", "status", "access_scope"],
+         "fact_count", "status", "tenant_id", "access_scope"],
     )
     return len(summary_rows)
 

@@ -28,8 +28,9 @@ databricks bundle run deep_search_memory_refresh -t dev
 
 ## Known gaps
 
-- **Scoping is missing.** Records do not carry `tenant_id`, `actor_id` or `visibility` (plan §E, §ADR-21). The index
-  sources write `access_scope = 'unscoped'`. Do not create AI Search indexes over these tables until PR-8 adds scoping.
+- **Scoping is resolved in PR-8.** Records carry `tenant_id`, `actor_id`, `visibility` and `access_scope` (schema 1.1).
+  The index sources take `access_scope` from the records. Records written before 1.1 have an empty scope and are never
+  returned by retrieval.
 - **Activity summaries are thin.** Trace events do not carry queries, source domains or fact counts, so the summary
   text reports the topic, status and critic comment. Richer summaries need the trace fields added in a later PR.
 - **Raw page text is not stored**, so no content artifacts are ingested (see PR-6).

@@ -2,9 +2,8 @@
 -- Built as a MERGE into a plain Delta table with Change Data Feed on, which AI Search Delta Sync requires
 -- (plan §ADR-11, default path in §G.2). ${catalog} is replaced by the job.
 --
--- NOT SAFE TO INDEX YET: records do not carry tenant_id, actor_id or visibility (plan §E, §ADR-21). access_scope
--- below is a placeholder that makes every row 'unscoped'. Retrieval in PR-8 must not run against an index built
--- from this table until scoping lands.
+-- access_scope comes from the records (schema 1.1+). Rows written before 1.1 carry an empty scope and are excluded
+-- by retrieval, which filters on tenant:<id> and actor:<id>.
 
 CREATE TABLE IF NOT EXISTS ${catalog}.memory.facts_index_src (
   canonical_fact_key STRING NOT NULL,
@@ -21,6 +20,8 @@ CREATE TABLE IF NOT EXISTS ${catalog}.memory.facts_index_src (
   observed_in_sessions ARRAY<STRING>,
   latest_fact_id STRING,
   supporting_quote STRING,
+  last_verified_at TIMESTAMP,
+  tenant_id STRING,
   access_scope STRING
 )
 TBLPROPERTIES (delta.enableChangeDataFeed = true);
@@ -43,7 +44,9 @@ USING (
     collect_set(research_session_id) AS observed_in_sessions,
     max_by(fact_id, ingested_at) AS latest_fact_id,
     max_by(quote, ingested_at) AS supporting_quote,
-    'unscoped' AS access_scope
+    max(ingested_at) AS last_verified_at,
+    max_by(tenant_id, ingested_at) AS tenant_id,
+    max_by(access_scope, ingested_at) AS access_scope
   FROM ${catalog}.memory.facts
   WHERE status = 'active' AND fact_kind = 'source_fact'
   GROUP BY canonical_fact_key

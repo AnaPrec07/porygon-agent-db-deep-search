@@ -28,6 +28,17 @@ def _today() -> str:
     return datetime.now(UTC).date().isoformat()
 
 
+def _prior_research(state: StateView) -> str:
+    brief = state.get("memory_brief") or {}
+    lines = [
+        f"- {fact['fact_text']} (source: {fact.get('source_title') or fact.get('source_url', '')}, "
+        f"last verified {fact.get('last_verified_at') or 'unknown'})"
+        for fact in brief.get("facts", [])
+    ]
+    lines += [f"- Earlier research on this topic: {row['summary_text']}" for row in brief.get("prior_activity", [])]
+    return "\n".join(lines) or "(none)"
+
+
 def plan_with_llm(llm: Any, state: StateView) -> str:
     previous = state.get("research_plan") or "(none)"
     feedback = (state.get("plan_feedback") or "").strip() or "(none)"
@@ -35,6 +46,7 @@ def plan_with_llm(llm: Any, state: StateView) -> str:
         f"Research topic: {state.get('research_topic', '')}\n\n"
         f"Previous plan:\n{previous}\n\n"
         f"User feedback:\n{feedback}\n\n"
+        f"Prior research (verified, may be outdated):\n{_prior_research(state)}\n\n"
         f"Current date: {_today()}"
     )
     plan = structured(llm, ResearchPlan, PLAN_SYSTEM, human)

@@ -11,6 +11,11 @@ from agent.deep_search.nodes import make_nodes
 from agent.deep_search.state import DeepSearchState
 
 
+def route_after_intake(state: DeepSearchState) -> str:
+    """A new topic retrieves prior research first. A revision (a plan already exists) goes straight to planning."""
+    return "plan_generator" if state.get("research_plan") else "memory_retriever"
+
+
 def route_after_plan_review(state: DeepSearchState) -> str:
     phase = state.get("phase")
     if phase == "researching":
@@ -44,7 +49,12 @@ def build_graph(deps: Deps, persistence: Any | None = None) -> StateGraph:
     max_iterations = deps.config.max_search_iterations
 
     builder.add_edge(START, "intake")
-    builder.add_edge("intake", "plan_generator")
+    builder.add_conditional_edges(
+        "intake",
+        route_after_intake,
+        {"plan_generator": "plan_generator", "memory_retriever": "memory_retriever"},
+    )
+    builder.add_edge("memory_retriever", "plan_generator")
     builder.add_edge("plan_generator", "plan_review")
     builder.add_conditional_edges(
         "plan_review",

@@ -19,6 +19,10 @@ from agent.deep_search.research.pipeline import ResearchServices
 StateView = dict[str, Any]
 
 
+def _empty_memory(state: StateView) -> dict[str, Any]:
+    return {"scope": "", "facts": [], "prior_responses": [], "prior_activity": [], "stale_fact_ids": [], "errors": []}
+
+
 def _stub_plan(state: StateView) -> str:
     topic = state.get("research_topic", "")
     lines = [
@@ -72,6 +76,7 @@ class Deps:
     evaluate: Callable[[StateView], dict[str, Any]]
     refine: Callable[[StateView], dict[str, Any]]
     compose: Callable[[StateView], str]
+    memory: Callable[[StateView], dict[str, Any]] = _empty_memory
 
     @classmethod
     def from_models(
@@ -81,6 +86,7 @@ class Deps:
         worker: Any,
         critic: Any,
         services: ResearchServices | None = None,
+        memory: Callable[[StateView], dict[str, Any]] | None = None,
     ) -> Deps:
         """LLM-backed plan, outline, evaluation and composition. With ``services``, research and refinement
         use search, extraction and verification (PR-5). Without them, those two stay stubs."""
@@ -91,6 +97,8 @@ class Deps:
             evaluate=lambda state: llm_nodes.evaluate_with_llm(critic, state),
             compose=lambda state: llm_nodes.compose_with_llm(critic, state),
         )
+        if memory is not None:
+            deps = replace(deps, memory=memory)
         if services is not None:
             deps = replace(
                 deps,

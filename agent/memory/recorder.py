@@ -29,6 +29,7 @@ from agent.memory.records import (
     TraceEventRecord,
 )
 from agent.memory.redaction import redact_text
+from agent.memory.scope import Scope
 from agent.memory.writer import PersistenceError, PersistenceWriter
 
 logger = logging.getLogger(__name__)
@@ -53,9 +54,18 @@ def _day() -> str:
 
 
 class Persistence:
-    def __init__(self, writer: PersistenceWriter, *, strict: bool = True) -> None:
+    def __init__(
+        self,
+        writer: PersistenceWriter,
+        *,
+        strict: bool = True,
+        scope: Scope | None = None,
+        on_session_complete: Callable[[], None] | None = None,
+    ) -> None:
         self._writer = writer
         self._strict = strict
+        self._scope = scope or Scope(tenant_id="default", actor_id="unknown")
+        self._on_complete = on_session_complete
 
     def wrap_nodes(self, nodes: dict[str, Callable[[dict[str, Any]], dict[str, Any]]]) -> dict[str, Any]:
         return {name: self._instrument(name, fn) for name, fn in nodes.items()}
@@ -152,6 +162,11 @@ class Persistence:
                 "session_manifest",
                 manifest,
             )
+            if phase == "done" and self._on_complete is not None:
+                try:
+                    self._on_complete()  # refresh trigger; durable state is already committed
+                except Exception as error:  # noqa: BLE001 - a failed refresh never fails the answer
+                    logger.warning("refresh trigger failed: %s", error)
 
         extra: dict[str, Any] = {"sequence": seq + 1}
         if "session_day" not in merged or merged.get("session_day") != day:
@@ -168,6 +183,9 @@ class Persistence:
         events: list[dict[str, Any]] = [{"event_type": "node_completed", "action": f"{name} completed"}]
         if name == "intake" and update.get("research_topic"):
             events.append({"event_type": "session_started", "action": redact_text(update["research_topic"], 200)})
+        if update.get("memory_brief") is not None:
+            brief = update["memory_brief"]
+            events.append({"event_type": "memory_retrieved", "action": f"{len(brief.get('facts', []))} eligible facts, {len(brief.get('stale_fact_ids', []))} stale"})
         if update.get("research_plan"):
             events.append({"event_type": "plan_generated", "action": f"revision {update.get('plan_revisions', 0)}"})
         if name == "plan_review" and update.get("phase") in ("researching", "cancelled"):
@@ -203,6 +221,7 @@ class Persistence:
                     action=redact_text(event.get("action"), 200),
                     decision_summary=event.get("decision_summary"),
                     error=event.get("error"),
+                    **self._scope.fields(),
                 )
             )
         return records
@@ -224,6 +243,7 @@ class Persistence:
                     title=info.get("title", "") or info.get("domain", ""),
                     published_at=info.get("published_at"),
                     queries=list(info.get("queries", [])),
+                    **self._scope.fields(),
                 )
             )
         return records
@@ -251,6 +271,7 @@ class Persistence:
                     quote_match=fact["quote_match"],
                     time_sensitivity=fact.get("time_sensitivity", "static"),
                     evidence_quality=fact.get("evidence_quality", "medium"),
+                    **self._scope.fields(),
                 )
             )
         return records
@@ -269,6 +290,7 @@ class Persistence:
             iterations_completed=int(merged.get("iteration", 0) or 0),
             final_grade=(merged.get("research_evaluation") or {}).get("grade"),
             updated_at=now,
+            **self._scope.fields(),
         )
         return self._writer.write_json(
             record_path("research_session", day, session_id, f"session-v{seq + 1:06d}.json"),
@@ -316,6 +338,7 @@ class Persistence:
             supporting_fact_ids=supporting,
             generated_at=now,
             citation_stats=dict(merged.get("citation_stats") or {}),
+            **self._scope.fields(),
         )
         response_file = self._writer.write_json(
             record_path("final_response", day, session_id, f"{response_id}-v0001.json"),
@@ -342,6 +365,7 @@ class Persistence:
                 timestamp=now,
                 status="error",
                 error=redact_text(f"{type(error).__name__}: {error}"),
+                **self._scope.fields(),
             )
             self._writer.write_jsonl(
                 record_path("trace_event", day, session_id, f"{stable_id(session_id, name, str(seq))}-error.jsonl"),
